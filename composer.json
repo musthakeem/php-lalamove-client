@@ -7,7 +7,7 @@
   },
   "description": "PHP Lalamove client library",
   "type": "library",
-  "license": "Free",
+  "license": "MIT",
   "authors": [
     {
       "name": "Jithu Musthakeem",
