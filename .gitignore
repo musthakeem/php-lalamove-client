@@ -1,0 +1,50 @@
+# Ignore directories containing dependencies or build artifacts
+/vendor/
+/dist/
+/build/
+/tests/
+
+# Ignore Composer's files
+composer.lock
+/autoload.php
+
+# Ignore log files, temporary files, and backups
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+
+# Ignore PHPUnit test results and coverage reports
+.phpunit.result.cache
+coverage/
+
+# Ignore IDE/editor specific files
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# Ignore test-related files and directories
+/tests/
+*Test.php
+
+# Ignore environment and configuration files
+.env
+.env.local
+
+# Ignore specific files that are not part of the core library
+try4
+Read Me
+Readme.md
+
+# Ignore Mac system files
+.DS_Store
+
+# Ignore specific test files
+/webhookTest.php
+/quotationTest.php
+/orderTest.php
+/marketsTest.php
+/driverTest.php
+/cityTest.php
