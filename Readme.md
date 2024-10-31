@@ -39,6 +39,8 @@ Before making any requests to the Lalamove API, initialize the `LalamoveClient` 
 ### Example:
 
 ```php
+require 'vendor/autoload.php';
+
 use JM\Lalamove\LalamoveClient;
 
 // Initialize LalamoveClient
