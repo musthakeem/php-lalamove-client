@@ -14,7 +14,7 @@
       "email": "jmusthak.devlp@gmail.com"
     }
   ],
-  "minimum-stability": "beta",
+  "minimum-stability": "stable",
   "require": {
     "php": ">=7.2",
     "phpunit/phpunit": "^9.0"
