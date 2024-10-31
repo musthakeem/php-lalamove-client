@@ -36,7 +36,7 @@ coverage/
 # Ignore specific files that are not part of the core library
 try4
 Read Me
-Readme.md
+# Readme.md
 
 # Ignore Mac system files
 .DS_Store
