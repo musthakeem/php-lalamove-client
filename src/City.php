@@ -64,12 +64,23 @@ class City
      * @param string $path The API path.
      * @param array $headers The headers to include in the request.
      * @return mixed The API response.
+     * @throws \Exception If there is an error fetching the data.
      */
     private function fetchCitiesData(string $path, array $headers)
     {
-        $result = $this->client->makeRequest('GET', $path, $headers, '');
+        $result = $this->client->makeRequest('GET', $path, $headers);
         
-        return $this->client->isJSONResponse() ? json_decode($result, true) : json_decode(json_encode($result), true);
+        if ($this->client->getConfig()->isJSON()) {
+            if (is_string($result)) {
+                return json_decode($result, true);
+            }
+            return $result;
+        } else {
+            if (is_string($result)) {
+                return $result;
+            }
+            return json_decode(json_encode($result), true);
+        }
     }
 
     /**
@@ -96,6 +107,10 @@ class City
         $closestLoad = PHP_FLOAT_MAX;
 
         foreach ($citiesData as $city) {
+            if (!isset($city['services']) || !is_array($city['services'])) {
+                continue;
+            }
+            
             foreach ($city['services'] as $service) {
                 if (isset($service['load']['value'])) {
                     $serviceLoad = floatval($service['load']['value']);
@@ -122,6 +137,10 @@ class City
         $closestService = null;
         $closestLoad = PHP_FLOAT_MAX;
 
+        if (!isset($city['services']) || !is_array($city['services'])) {
+            return null;
+        }
+
         foreach ($city['services'] as $service) {
             if (isset($service['load']['value'])) {
                 $serviceLoad = floatval($service['load']['value']);
@@ -136,35 +155,58 @@ class City
     }
 
     /**
+     * Prepares a standardized response object.
+     *
+     * @param array $data The response data.
+     * @param bool $isError Whether this is an error response.
+     * @param int $statusCode The HTTP status code.
+     * @return mixed The formatted response.
+     */
+    private function prepareResponse(array $data, bool $isError = false, int $statusCode = 200)
+    {
+        $response = $isError 
+            ? array_merge(['error' => true, 'status_code' => $statusCode], $data)
+            : ['data' => $data, 'status_code' => $statusCode];
+            
+        return $this->client->getConfig()->isJSON() 
+            ? json_encode($response, JSON_PRETTY_PRINT) 
+            : (object) $response;
+    }
+
+    /**
      * Retrieves the city data by its ID.
      *
      * @param string $cityId The city ID.
      * @param string $reqMarket Optional market to override the default market.
-     * @return array The response containing city data or an error message.
+     * @return mixed The response containing city data or an error message.
+     * @throws \InvalidArgumentException If cityId is empty.
      */
-    public function retrieve(string $cityId, string $reqMarket = ''): string | object
+    public function retrieve(string $cityId, string $reqMarket = '')
     {
+        if (empty(trim($cityId))) {
+            throw new \InvalidArgumentException('City ID cannot be empty');
+        }
+
         $path = "/v3/cities";
         $market = $reqMarket ?: $this->client->getMarket();
-        $headers = $this->client->getSignatureGenerator()->getHeaders('GET', $path, $market, '', $this->client->getRequestId());
+        $headers = $this->getHeaders('GET', $path, $market);
 
         try {
             $response = $this->fetchCitiesData($path, $headers);
             
             if (!$this->isValidResponse($response)) {
-                $error = ['error' => 'Invalid API response structure', 'status_code' => 500];                
-                 return $this->client->isJSONResponse() ? json_encode($error , JSON_PRETTY_PRINT) : (object) $error;
+                return $this->prepareResponse(['message' => 'Invalid API response structure'], true, 500);
             }
 
             $cities = $this->transformCities($response['data']);
             $foundCity = $this->findCityById($cities, $cityId);
 
-            $city =  $foundCity ? ['data' => $foundCity] : ['error' => 'No such city with ID: ' . $cityId, 'status_code' => 404];
-            return $this->client->isJSONResponse() ? json_encode($city , JSON_PRETTY_PRINT) : (object) $city;
+            return $foundCity 
+                ? $this->prepareResponse($foundCity) 
+                : $this->prepareResponse(['message' => 'No such city with ID: ' . $cityId], true, 404);
 
-        } catch (Exception $e) {
-            $e = ['error' => $e->getMessage(), 'status_code' => 500];
-            return $this->client->isJSONResponse() ? json_encode($e , JSON_PRETTY_PRINT) : (object) $e;
+        } catch (\Exception $e) {
+            return $this->prepareResponse(['message' => $e->getMessage()], true, 500);
         }
     }
 
@@ -174,291 +216,64 @@ class City
      * @param float $targetLoad The target load value to match.
      * @param string $cityId Optional city ID to search within a specific city.
      * @param string $reqMarket Optional market to override the default market.
-     * @return array|null The service key if found, or an error message.
+     * @return mixed The service key if found, or an error message.
+     * @throws \InvalidArgumentException If targetLoad is less than 0.
      */
-    public function getServiceKeyByLoad(float $targetLoad, string $cityId, string $reqMarket = ''): string | object
+    public function getServiceKeyByLoad(float $targetLoad, string $cityId = '', string $reqMarket = '')
     {
+        if ($targetLoad < 0) {
+            throw new \InvalidArgumentException('Target load cannot be negative');
+        }
+
         $path = "/v3/cities";
         $market = $reqMarket ?: $this->client->getMarket();
-        $headers = $this->client->getSignatureGenerator()->getHeaders('GET', $path, $market, '', $this->client->getRequestId());
+        $headers = $this->getHeaders('GET', $path, $market);
 
         try {
             $response = $this->fetchCitiesData($path, $headers);
             
             if (!$this->isValidResponse($response)) {
-                $error =  ['error' => 'Invalid API response structure', 'status_code' => 500];
-                return $this->client->isJSONResponse() ? json_encode($error , JSON_PRETTY_PRINT) : (object) $error;
-
+                return $this->prepareResponse(['message' => 'Invalid API response structure'], true, 500);
             }
 
-            if ($cityId) {
+            if (!empty($cityId)) {
                 $cities = $this->transformCities($response['data']);
                 $foundCity = $this->findCityById($cities, $cityId);
                 
-                $service = $foundCity
-                   ? ['data' => ['serviceType' => $this->findCityServiceByLoad($foundCity, $targetLoad)]]
-                   : ['error' => 'No such city with ID: ' . $cityId, 'status_code' => 404];
-                
-                   return $this->client->isJSONResponse() ? json_encode($service , JSON_PRETTY_PRINT) : (object) $service;
+                if (!$foundCity) {
+                    return $this->prepareResponse(['message' => 'No such city with ID: ' . $cityId], true, 404);
                 }
+                
+                $serviceKey = $this->findCityServiceByLoad($foundCity, $targetLoad);
+                return $this->prepareResponse(['serviceType' => $serviceKey]);
+            }
 
-            $service = ['data' => ['serviceType' => $this->findClosestServiceByLoad($response['data'], $targetLoad)]];
-            return $this->client->isJSONResponse() ? json_encode($service , JSON_PRETTY_PRINT) : (object) $service;
+            $serviceKey = $this->findClosestServiceByLoad($response['data'], $targetLoad);
+            return $this->prepareResponse(['serviceType' => $serviceKey]);
 
-
-        } catch (Exception $e) {
-            $e = ['error' => $e->getMessage(), 'status_code' => 500];
-            return $this->client->isJSONResponse() ? json_encode($e , JSON_PRETTY_PRINT) : (object) $e;
+        } catch (\Exception $e) {
+            return $this->prepareResponse(['message' => $e->getMessage()], true, 500);
         }
     }
-}
-
-
-//V2.0
-// namespace JMusthakeem\Lalamove;
-
-// class City
-// {
-//     private $client;
-
-//     public function __construct(LalamoveClient $client)
-//     {
-//         $this->client = $client;
-//     }
-
-//     /**
-//      * Transforms the cities by converting 'locode' to 'id'.
-//      */
-//     private function transformCities(array $cities): array
-//     {
-//         foreach ($cities as &$city) {
-//             if (isset($city['locode'])) {
-//                 $city['id'] = $city['locode'];
-//                 unset($city['locode']);
-//             }
-//         }
-//         return $cities;
-//     }
-
-//     /**
-//      * Finds the city by its ID.
-//      */
-//     private function findCityById(array $cities, $cityId): ?array
-//     {
-//         foreach ($cities as $city) {
-//             if ($city['id'] === $cityId) {
-//                 return $city;
-//             }
-//         }
-//         return null;
-//     }
-
-//     /**
-//      * Fetches city data from the API.
-//      */
-//     private function fetchCitiesData(string $path, array $headers)
-//     {
-//         return $this->client->makeRequest('GET', $path, $headers, '', $this->client->isJSONResponse());
-
-//     }
-
-//     /**
-//      * Validates if the API response contains a valid data structure.
-//      */
-//     private function isValidResponse($response): bool
-//     {
-//         return isset($response['data']) && is_array($response['data']);
-//     }
-
-//     /**
-//      * Finds the closest service key based on the load value.
-//      */
-//     private function findClosestServiceByLoad(array $citiesData, float $targetLoad): ?string
-//     {
-//         $closestService = null;
-//         $closestLoad = PHP_FLOAT_MAX;
-
-//         foreach ($citiesData as $city) {
-//             foreach ($city['services'] as $service) {
-//                 if (isset($service['load']['value'])) {
-//                     $serviceLoad = floatval($service['load']['value']);
-//                     if ($serviceLoad >= $targetLoad && $serviceLoad < $closestLoad) {
-//                         $closestLoad = $serviceLoad;
-//                         $closestService = $service['key'];
-//                     }
-//                 }
-//             }
-//         }
-
-//         return $closestService;
-//     }
-
-//     private function findCityServiceByLoad(array $city, float $targetLoad): ?string
-//     {
-//         $closestService = null;
-//         $closestLoad = PHP_FLOAT_MAX;
-
-//             foreach ($city['services'] as $service) {
-//                 if (isset($service['load']['value'])) {
-//                     $serviceLoad = floatval($service['load']['value']);
-//                     if ($serviceLoad >= $targetLoad && $serviceLoad < $closestLoad) {
-//                         $closestLoad = $serviceLoad;
-//                         $closestService = $service['key'];
-//                     }
-//                 }
-//             }
-
-//         return $closestService;
-//     }
-
-//     // Method to get the status of the city by ID
-//     public function retrieve($cityId, $reqMarket = '')
-//     {
-//         $path = "/v3/cities";
-//         $market = $reqMarket ?: $this->client->getMarket();
-//         $headers = $this->client->getSignatureGenerator()->getHeaders('GET', $path, $market, '', $this->client->getRequestId());
-
-//         try {
-//             // Fetch data from the API
-//             $response = $this->client->makeRequest('GET', $path, $headers, '', $this->client->isJSONResponse());
-            
-//             // Validate and process the response
-//             if (!$this->isValidResponse($response)) {
-//                 return ['error' => 'Invalid API response structure', 'status_code' => 500];
-//             }
-
-//             // Transform cities and find the matching city by ID
-//             $cities = $this->transformCities($response['data']);
-//             $foundCity = $this->findCityById($cities, $cityId);
-
-//             // Return the found city or an error if not found
-//             return $foundCity ? ['data' => $foundCity] : ['error' => 'No such city with ID: ' . $cityId, 'status_code' => 404];
-
-//         } catch (Exception $e) {
-//             return ['error' => $e->getMessage(), 'status_code' => 500];
-//         }
-//     }
-
-//     public function getServiceKeyByLoad(float $targetLoad, $cityId = '', $reqMarket = ''): ?array
-//     {
-//         $path = "/v3/cities";
-//         $market = $reqMarket ?: $this->client->getMarket();
-//         $headers = $this->client->getSignatureGenerator()->getHeaders('GET', $path, $market, '', $this->client->getRequestId());
-
-//         try {
-//             // Fetch data from the API
-//             $response = $this->fetchCitiesData($path, $headers);
-            
-//             // Validate the response structure
-//             if (!$this->isValidResponse($response)) {
-//                 return ['error' => 'Invalid API response structure', 'status_code' => 500];
-//             }
-
-//             if ($cityId){
-//                 $cities = $this->transformCities($response['data']);
-//                 $foundCity = $this->findCityById($cities, $cityId);
-//                 return $foundCity ?
-//                 ['data' => ['serviceType'=> $this->findCityServiceByLoad($foundCity, $targetLoad)]]:
-//                 ['error' => 'No such city with ID: ' . $cityId, 'status_code' => 404];
-//             }
-
-//             // Find and return the closest service key by load
-//             return ['data' => ['serviceType'=>$this->findClosestServiceByLoad($response['data'], $targetLoad)]];
-
-//         } catch (\Exception $e) {
-//             return ['error' => $e->getMessage(), 'status_code' => 500];
-//         }
-//     }
-
-
-    // V1.0
-    // public function retrieve($reqMarket, $cityId)
-    // {
-    //     $path = "/v3/cities";
-    //     $market = $reqMarket ?: $this->client->getMarket();
-    //     $headers = $this->client->getSignatureGenerator()->getHeaders('GET', $path, $market, '', $this->client->getRequestId());
-
-    //     try {
-    //         // Fetch data from the API
-    //         $response = $this->client->makeRequest('GET', $path, '', $headers);
-            
-    //         if (isset($response['data']) && is_array($response['data'])) {
-    //             $cities = $response['data'];
-    //             $foundCity = null;
-
-    //             // Iterate over the cities and transform the data
-    //             foreach ($cities as &$city) {
-    //                 // Transform the locode to id
-    //                 if (isset($city['locode'])) {
-    //                     $city['id'] = $city['locode'];
-    //                     unset($city['locode']);
-    //                 }
-
-    //                 // Find the city with the given cityId
-    //                 if ($city['id'] === $cityId) {
-    //                     $foundCity = $city;
-    //                     break;
-    //                 }
-    //             }
-
-    //             // If the city is found, return its details
-    //             return $foundCity ? $foundCity : ['error' => 'No such city with ID: ' . $cityId, 'status_code' => 404];
-
-    //         } else {
-    //             // Return error message if the response structure is invalid
-    //             return ['error' => 'Invalid API response structure', 'status_code' => 500];
-    //         }
-    //     } catch (Exception $e) {
-    //         // Catch any exceptions and set result as error
-    //         return ['error' => $e->getMessage(), 'status_code' => 500];
-    //     }
-    // }
     
-    // public function getKeyByLoad(float $targetLoad, $reqMarket = ''): ?string
-    // {
-    //     $path = "/v3/cities";
-    //     $market = $reqMarket ?: $this->client->getMarket();
-    //     $headers = $this->client->getSignatureGenerator()->getHeaders('GET', $path, $market, '', $this->client->getRequestId());
-
-    //     try {
-    //         // Fetch data from the API
-    //         $response = $this->client->makeRequest('GET', $path, '', $headers);
-                
-    //         if (isset($response['data']) && is_array($response['data'])) {
-    //             $citiesData = $response['data'];
-        
-    //         $closestService = null;
-    //         $closestLoad = PHP_FLOAT_MAX;
-
-    //         // Loop through the data array
-    //         foreach ($citiesData['data'] as $city) {
-    //             // Loop through the services array for each city
-    //             foreach ($city['services'] as $service) {
-    //                 // Check if the service has a valid load value
-    //                 if (isset($service['load']['value'])) {
-    //                     $serviceLoad = floatval($service['load']['value']);
-                        
-    //                     // If the service load is greater than or equal to the target load and is closer than the previous match
-    //                     if ($serviceLoad >= $targetLoad && $serviceLoad < $closestLoad) {
-    //                         $closestLoad = $serviceLoad;
-    //                         $closestService = $service['key'];
-    //                     }
-    //                 }
-    //             }
-    //         }
-
-    //         // Return the key of the closest matching service or null if none found
-    //         return $closestService;
-            
-    //         }  else {
-    //             // Return error message if the response structure is invalid
-    //             return ['error' => 'Invalid API response structure', 'status_code' => 500];
-    //         }
-    //     } catch (\Exception $e) {
-    //         return ['error' => $e->getMessage(), 'status_code' => 500];
-    //     }
-
-    // }
-
-// }
+    /**
+     * Helper method to get request headers with proper authorization.
+     *
+     * @param string $method The HTTP method.
+     * @param string $path The API endpoint path.
+     * @param string $market The market to use for this request.
+     * @param string $body The request body (if applicable).
+     * @return array The prepared headers.
+     */
+    private function getHeaders(string $method, string $path, string $market, string $body = ''): array
+    {
+        return $this->client->getSignatureGenerator()->getHeaders(
+            $method,
+            $path,
+            $market,
+            $body,
+            $this->client->getRequestId()
+        );
+    }
+}
 

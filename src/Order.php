@@ -27,13 +27,23 @@ class Order
      *
      * @param array $payload The data payload for the new order.
      * @return mixed The API response.
+     * @throws \InvalidArgumentException If the payload is invalid.
      */
-    public function create(mixed $payload)
+    public function create(array $payload)
     {
+        // Validate the payload
+        if (empty($payload)) {
+            throw new \InvalidArgumentException('Order payload cannot be empty');
+        }
+
         $path = '/v3/orders';
         $body = json_encode(["data" => $payload]);
-        $headers = $this->client->getSignatureGenerator()->getHeaders('POST', $path, $this->client->getMarket(), $body, $this->client->getRequestId());
-
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new \InvalidArgumentException('Invalid order payload: ' . json_last_error_msg());
+        }
+        
+        $headers = $this->getHeaders('POST', $path, $body);
         return $this->client->makeRequest('POST', $path, $headers, $body);
     }
 
@@ -42,13 +52,15 @@ class Order
      *
      * @param string $orderId The unique identifier for the order.
      * @return mixed The API response.
+     * @throws \InvalidArgumentException If the order ID is empty.
      */
     public function retrieve(string $orderId)
     {
+        $this->validateOrderId($orderId);
         $path = "/v3/orders/{$orderId}";
-        $headers = $this->client->getSignatureGenerator()->getHeaders('GET', $path, $this->client->getMarket(), '', $this->client->getRequestId());
+        $headers = $this->getHeaders('GET', $path);
 
-        return $this->client->makeRequest('GET', $path, $headers, '');
+        return $this->client->makeRequest('GET', $path, $headers);
     }
 
     /**
@@ -56,13 +68,15 @@ class Order
      *
      * @param string $orderId The unique identifier for the order to be cancelled.
      * @return mixed The API response.
+     * @throws \InvalidArgumentException If the order ID is empty.
      */
     public function cancel(string $orderId)
     {
+        $this->validateOrderId($orderId);
         $path = "/v3/orders/{$orderId}";
-        $headers = $this->client->getSignatureGenerator()->getHeaders('DELETE', $path, $this->client->getMarket(), '', $this->client->getRequestId());
+        $headers = $this->getHeaders('DELETE', $path);
 
-        return $this->client->makeRequest('DELETE', $path, $headers, '');
+        return $this->client->makeRequest('DELETE', $path, $headers);
     }
 
     /**
@@ -71,13 +85,25 @@ class Order
      * @param string $orderId The unique identifier for the order to be updated.
      * @param array $payload The data payload with the new order details.
      * @return mixed The API response.
+     * @throws \InvalidArgumentException If the order ID or payload is invalid.
      */
-    public function edit(string $orderId, mixed $payload)
+    public function edit(string $orderId, array $payload)
     {
+        $this->validateOrderId($orderId);
+        
+        // Validate the payload
+        if (empty($payload)) {
+            throw new \InvalidArgumentException('Edit payload cannot be empty');
+        }
+
         $path = "/v3/orders/{$orderId}";
         $body = json_encode(["data" => ['stops' => $payload]]);
-        $headers = $this->client->getSignatureGenerator()->getHeaders('PATCH', $path, $this->client->getMarket(), $body, $this->client->getRequestId());
-
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new \InvalidArgumentException('Invalid edit payload: ' . json_last_error_msg());
+        }
+        
+        $headers = $this->getHeaders('PATCH', $path, $body);
         return $this->client->makeRequest('PATCH', $path, $headers, $body);
     }
     
@@ -85,75 +111,59 @@ class Order
      * Adds a priority fee to an existing order.
      *
      * @param string $orderId The unique identifier for the order.
-     * @param float $fee The amount of the priority fee to be added.
+     * @param string|float $fee The amount of the priority fee to be added.
      * @return mixed The API response.
+     * @throws \InvalidArgumentException If the order ID or fee is invalid.
      */
-    public function addPriorityFee(string $orderId, string $fee)
+    public function addPriorityFee(string $orderId, $fee)
     {
+        $this->validateOrderId($orderId);
+        
+        // Validate the fee
+        if (!is_numeric($fee) || (float)$fee <= 0) {
+            throw new \InvalidArgumentException('Priority fee must be a positive number');
+        }
+        
         $path = "/v3/orders/{$orderId}/priority-fee";
-        $body = json_encode(["data" => ["priorityFee"=> $fee]]);
-        $headers = $this->client->getSignatureGenerator()->getHeaders('POST', $path, $this->client->getMarket(), $body, $this->client->getRequestId());
-
+        $body = json_encode(["data" => ["priorityFee" => (string)$fee]]);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new \InvalidArgumentException('Invalid priority fee format: ' . json_last_error_msg());
+        }
+        
+        $headers = $this->getHeaders('POST', $path, $body);
         return $this->client->makeRequest('POST', $path, $headers, $body);
     }
-}
-
-
-
-// namespace JMusthakeem\Lalamove;
-
-// class Order
-// {
-//     private $client;
-
-//     public function __construct(LalamoveClient $client)
-//     {
-//         $this->client = $client;
-//     }
-
-//     public function create($payload)
-//     {
-//         $path = '/v3/orders';
-//         $body = (["data" => $payload]);
-//         $headers = $this->client->getSignatureGenerator()->getHeaders('POST', $path, $this->client->getMarket(), json_encode($body), $this->client->getRequestId());
-
-//         return $this->client->makeRequest('POST', $path, $headers, json_encode($body), $this->client->isJSONResponse());
-
-//     }
-
-//     public function retrieve($orderId)
-//     {
-//         $path = "/v3/orders/{$orderId}";
-//         $headers = $this->client->getSignatureGenerator()->getHeaders('GET', $path, $this->client->getMarket(), '', $this->client->getRequestId());
-
-//         return $this->client->makeRequest('GET', $path, $headers, '', $this->client->isJSONResponse());
-//     }
-
-//     public function cancel($orderId)
-//     {
-//         $path = "/v3/orders/{$orderId}";
-//         $headers = $this->client->getSignatureGenerator()->getHeaders('DELETE', $path, $this->client->getMarket(), '', $this->client->getRequestId());
-
-//         return $this->client->makeRequest('DELETE', $path, $headers, '', $this->client->isJSONResponse());
-//     }
-
-//     public function edit($orderId, $payload)
-//     {
-//         $path = "/v3/orders/{$orderId}";
-//         $body = (["data" => ['stops' => $payload]]);
-//         print_r(json_encode($body,JSON_PRETTY_PRINT));
-//         $headers = $this->client->getSignatureGenerator()->getHeaders('PATCH', $path, $this->client->getMarket(), json_encode($body), $this->client->getRequestId());
-
-//         return $this->client->makeRequest('PATCH', $path, $headers, json_encode($body), $this->client->isJSONResponse());
-//     }
     
-//     public function addPriorityFee($orderId, $fee)
-//     {
-//         $path = "/v3/orders/{$orderId}/priority-fee";
-//         $payload = (["priorityFee"=> $fee]);
-//         $body = (["data" => $payload]);
-//         $headers = $this->client->getSignatureGenerator()->getHeaders('POST', $path, $this->client->getMarket(), json_encode($body), $this->client->getRequestId());
-
-//         return $this->client->makeRequest('POST', $path, $headers, json_encode($body), $this->client->isJSONResponse());
-//     }
-// }
+    /**
+     * Helper method to get request headers with proper authorization.
+     *
+     * @param string $method The HTTP method.
+     * @param string $path The API endpoint path.
+     * @param string $body The request body (if applicable).
+     * @return array The prepared headers.
+     */
+    private function getHeaders(string $method, string $path, string $body = ''): array
+    {
+        return $this->client->getSignatureGenerator()->getHeaders(
+            $method,
+            $path,
+            $this->client->getMarket(),
+            $body,
+            $this->client->getRequestId()
+        );
+    }
+    
+    /**
+     * Validates that an order ID is not empty.
+     *
+     * @param string $orderId The order ID to validate.
+     * @throws \InvalidArgumentException If the order ID is empty.
+     */
+    private function validateOrderId(string $orderId): void
+    {
+        if (empty(trim($orderId))) {
+            throw new \InvalidArgumentException('Order ID cannot be empty');
+        }
+    }
+}

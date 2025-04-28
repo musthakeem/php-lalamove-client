@@ -27,13 +27,23 @@ class Quotation
      *
      * @param array $payload The data payload for the quotation.
      * @return mixed The API response.
+     * @throws \InvalidArgumentException If the payload is invalid
      */
-    public function create(mixed $payload)
+    public function create(array $payload)
     {
-        $path = '/v3/quotations';
-        $body = json_encode(["data" => $payload]); // Encode the payload to JSON string
-        $headers = $this->client->getSignatureGenerator()->getHeaders('POST', $path, $this->client->getMarket(), $body, $this->client->getRequestId());
+        // Validate the payload
+        if (empty($payload)) {
+            throw new \InvalidArgumentException('Quotation payload cannot be empty');
+        }
 
+        $path = '/v3/quotations';
+        $body = json_encode(["data" => $payload]);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new \InvalidArgumentException('Invalid quotation payload: ' . json_last_error_msg());
+        }
+        
+        $headers = $this->getHeaders('POST', $path, $body);
         return $this->client->makeRequest('POST', $path, $headers, $body);
     }
 
@@ -42,47 +52,47 @@ class Quotation
      *
      * @param string $quotationId The unique identifier for the quotation to retrieve.
      * @return mixed The API response.
+     * @throws \InvalidArgumentException If the quotation ID is empty
      */
     public function retrieve(string $quotationId)
     {
+        $this->validateQuotationId($quotationId);
+        
         $path = "/v3/quotations/{$quotationId}";
-        $headers = $this->client->getSignatureGenerator()->getHeaders('GET', $path, $this->client->getMarket(), '', $this->client->getRequestId());
+        $headers = $this->getHeaders('GET', $path);
 
-        return $this->client->makeRequest('GET', $path, $headers, '');
+        return $this->client->makeRequest('GET', $path, $headers);
+    }
+    
+    /**
+     * Helper method to get request headers with proper authorization.
+     *
+     * @param string $method The HTTP method.
+     * @param string $path The API endpoint path.
+     * @param string $body The request body (if applicable).
+     * @return array The prepared headers.
+     */
+    private function getHeaders(string $method, string $path, string $body = ''): array
+    {
+        return $this->client->getSignatureGenerator()->getHeaders(
+            $method,
+            $path,
+            $this->client->getMarket(),
+            $body,
+            $this->client->getRequestId()
+        );
+    }
+    
+    /**
+     * Validates that a quotation ID is not empty.
+     *
+     * @param string $quotationId The quotation ID to validate.
+     * @throws \InvalidArgumentException If the quotation ID is empty.
+     */
+    private function validateQuotationId(string $quotationId): void
+    {
+        if (empty(trim($quotationId))) {
+            throw new \InvalidArgumentException('Quotation ID cannot be empty');
+        }
     }
 }
-
-
-
-// namespace JMusthakeem\Lalamove;
-
-// class Quotation
-// {
-//     private $client;
-
-//     public function __construct(LalamoveClient $client)
-//     {
-//         $this->client = $client;
-//     }
-
-
-//     public function create($payload)
-//     {
-//         $path = '/v3/quotations';
-//         $body = (["data" => $payload]);
-//         $headers = $this->client->getSignatureGenerator()->getHeaders('POST', $path, $this->client->getMarket(), json_encode($body), $this->client->getRequestId());
-
-//         return $this->client->makeRequest('POST', $path, $headers, json_encode($body));
-
-//     }
-
-//     public function retrieve($quotationId)
-//     {
-//         $path = "/v3/quotations/{$quotationId}";
-//         $headers = $this->client->getSignatureGenerator()->getHeaders('GET', $path, $this->client->getMarket(), '', $this->client->getRequestId());
-
-//         return $this->client->makeRequest('GET', $path, $headers, '');
-
-//     }
-    
-// }

@@ -31,40 +31,35 @@ class Market
      */
     public function retrieve(string $reqMarket = '')
     {
-        // Debugging or logging statements should typically be handled through logging services rather than echoing directly.
-        // Example: $this->logger->info("Rescue: " . $this->client->isJSONResponse());
-        // Example: $this->logger->info($this->client->getRequestId() . " *** reQQ3 ***");
-
         $path = "/v3/cities";
         $market = $reqMarket ?: $this->client->getMarket(); // Use provided market or default to client's market.
-        $headers = $this->client->getSignatureGenerator()->getHeaders('GET', $path, $market, '', $this->client->getRequestId());
-
-        return $this->client->makeRequest('GET', $path, $headers, '');
+        
+        // Validate market
+        if (empty(trim($market))) {
+            throw new \InvalidArgumentException('Market cannot be empty');
+        }
+        
+        $headers = $this->getHeaders('GET', $path, $market);
+        return $this->client->makeRequest('GET', $path, $headers);
+    }
+    
+    /**
+     * Helper method to get request headers with proper authorization.
+     *
+     * @param string $method The HTTP method.
+     * @param string $path The API endpoint path.
+     * @param string $market The market to use for this request.
+     * @param string $body The request body (if applicable).
+     * @return array The prepared headers.
+     */
+    private function getHeaders(string $method, string $path, string $market, string $body = ''): array
+    {
+        return $this->client->getSignatureGenerator()->getHeaders(
+            $method,
+            $path,
+            $market,
+            $body,
+            $this->client->getRequestId()
+        );
     }
 }
-
-
-// namespace JMusthakeem\Lalamove;
-
-// class Market
-// {
-//     private $client;
-
-//     public function __construct(LalamoveClient $client)
-//     {
-//         $this->client = $client;
-//     }
-
-//      public function retrieve($reqMarket = '')
-//     {
-//         echo "Rescue: " .$this->client->isJSONResponse() ;
-//         echo $this->client->getRequestId(). "*** reQQ3 ***\n";
-
-//         $path = "/v3/cities";
-//         $market = $reqMarket ?: $this->client->getMarket();
-//         $headers = $this->client->getSignatureGenerator()->getHeaders('GET', $path, $market, '', $this->client->getRequestId());
-
-//         return $this->client->makeRequest('GET', $path, $headers, '');
-
-//     }
-// }

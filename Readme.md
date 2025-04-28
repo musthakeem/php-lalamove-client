@@ -14,6 +14,7 @@ This guide walks you through the setup, core functionalities, and usage of the p
 - **Market and City Information**: Access available markets and cities for deliveries.
 - **Webhook Handling**: Set up webhooks to receive real-time updates on order statuses.
 - **Payload Builders**: Build payloads for quotations, orders, and patch orders easily with validation.
+- **Centralized Configuration**: Use the Config class for better organization and management of client settings.
 
 ---
 
@@ -27,32 +28,53 @@ composer require jmusthakeem/lalamove
 
 ### Requirements
 
-- PHP 7.0+
+- PHP 7.4+
 - cURL extension enabled in PHP
+- JSON extension enabled in PHP
 
 ---
 
 ## 2. Initialization
 
-Before making any requests to the Lalamove API, initialize the `LalamoveClient` with your credentials and market information.
+Before making any requests to the Lalamove API, initialize the `LalamoveClient` using either the Config class or the convenience static method.
 
-### Example:
+### Using Config Class (Recommended):
+
+```php
+use JM\Lalamove\Config;
+use JM\Lalamove\LalamoveClient;
+
+// Create a Config object with all necessary settings
+$config = new Config(
+    'yourApiKey',   // Required: API Key
+    'yourApiSecret',// Required: API Secret
+    'market',       // Required: Your market (e.g., 'SG')
+    'sandbox',      // Optional: Choose environment: 'sandbox' or 'production' (default: 'sandbox')
+    true,           // Optional: Response type: true for JSON, false for Object (default: true)
+    'requestId'     // Optional: Unique request ID (auto-generated if not provided)
+);
+
+// Initialize LalamoveClient with Config object
+$client = new LalamoveClient($config);
+```
+
+### Using Static Create Method (Backward Compatible):
 
 ```php
 use JM\Lalamove\LalamoveClient;
 
 // Initialize LalamoveClient
-$client = new LalamoveClient(
+$client = LalamoveClient::create(
     'yourApiKey',   // Required: API Key
     'yourApiSecret',// Required: API Secret
     'market',       // Required: Your market (e.g., 'SG')
-    'sandbox',      // Required: Choose environment: 'sandbox' or 'production'
-    'isJson',       // Optional: Response type: default 'true' for JSON 'false' for Object
-    'requestId',    // Optional: Unique request ID (optional, can use UUID)
+    'sandbox',      // Optional: Choose environment: 'sandbox' or 'production' (default: 'sandbox')
+    true,           // Optional: Response type: default 'true' for JSON 'false' for Object
+    'requestId'     // Optional: Unique request ID (optional, can use UUID)
 );
 ```
 
-##### Response: `(isJson = default | true)`
+##### Response: `(isJSON = default | true)`
 
 ```json
 {
@@ -65,7 +87,7 @@ $client = new LalamoveClient(
 }
 ```
 
-##### Response: `(isJson = false)`
+##### Response: `(isJSON = false)`
 
 ```php
 Object
@@ -118,13 +140,18 @@ $quotationPayload = $client->quotationPayloadBuilder()
     ->setIsRouteOptimized(true)
     ->setSpecialRequests(['fragile'])
     ->build();    // Finalizes and builds the payload for the quotation
-```
 
-##### Request
-
-```php
-$quotation = $client->getQuotation()->create($quotationPayload);
-print_r($quotation);
+// Create quotation with error handling
+try {
+    $quotation = $client->getQuotation()->create($quotationPayload);
+    print_r($quotation);
+} catch (\InvalidArgumentException $e) {
+    // Handle validation errors
+    echo "Validation error: " . $e->getMessage();
+} catch (\Exception $e) {
+    // Handle other errors
+    echo "Error: " . $e->getMessage();
+}
 ```
 
 ##### Expected Output:
@@ -177,32 +204,15 @@ To retrieve an existing quotation, use the `retrieve` method.
 
 #### Code Example:
 
-##### Request
-
 ```php
-$quotationId = 'yourQuotationId'; // quotation->quotationId => 3077495749739347740
-
-$quotationDetail = $client->getQuotation()->retrieve($quotationId);
-print_r($quotationDetail);
-```
-
-##### Expected Output:
-
-```json
-{
-  "data": {
-    "quotationId": "3077495749739347740",
-    "stops": [],
-    "isRouteOptimized": false,
-    "priceBreakdown": {
-      "base": "7.2",
-      "totalBeforeOptimization": "7.2",
-      "totalExcludePriorityFee": "7.2",
-      "total": "7.2",
-      "currency": "SGD"
-    },
-    "distance": {}
-  }
+try {
+    $quotationId = 'yourQuotationId'; // quotation->quotationId => 3077495749739347740
+    $quotationDetail = $client->getQuotation()->retrieve($quotationId);
+    print_r($quotationDetail);
+} catch (\InvalidArgumentException $e) {
+    echo "Validation error: " . $e->getMessage();
+} catch (\Exception $e) {
+    echo "Error: " . $e->getMessage();
 }
 ```
 
@@ -730,30 +740,62 @@ print_r($response);
 
 ## 7. Exception Handling
 
-Ensure you handle exceptions in your code to catch errors returned by the API or Client.
+The client library now includes improved error handling with specific exceptions for better debugging and reliability.
 
 ### Code Example:
-
-##### Request
 
 ```php
 try {
     $response = $client->getOrder()->create($orderPayload);
-    if (isset($response['error'])) {
-        echo "Error: " . $response['error'];
-    } else {
-        print_r($response);
-    }
-} catch (Exception $e) {
-    echo "Exception: " . $e->getMessage();
+    print_r($response);
+} catch (\InvalidArgumentException $e) {
+    // Handle validation errors (invalid inputs)
+    echo "Validation error: " . $e->getMessage();
+} catch (\RuntimeException $e) {
+    // Handle runtime errors (API errors)
+    echo "API error: " . $e->getMessage();
+} catch (\Exception $e) {
+    // Handle any other unexpected errors
+    echo "Unexpected error: " . $e->getMessage();
 }
+```
+
+## 8. Advanced Configuration
+
+The new Config class provides a centralized way to manage all configuration options for the Lalamove client.
+
+### Available Configuration Options
+
+```php
+use JM\Lalamove\Config;
+
+// Create a configuration with all options
+$config = new Config(
+    'yourApiKey',        // API Key
+    'yourApiSecret',     // API Secret
+    'SG',                // Market code
+    'production',        // Environment ('production' or 'sandbox')
+    true,                // Return responses as JSON (true) or objects (false)
+    '123e4567-e89b-12d3' // Custom request ID
+);
+
+// Access configuration values
+echo $config->getBaseUrl();       // https://rest.lalamove.com
+echo $config->getEnvironment();   // production
+echo $config->getMarket();        // SG
+
+// Generate a new request ID for the next request
+$newRequestId = $config->generateNewRequestId();
+
+// Create client with this configuration
+$client = new LalamoveClient($config);
 ```
 
 ---
 
 ## Conclusion
 
-This guide provides the essential steps for building payloads, creating quotations and orders, and managing drivers and city information using the Lalamove PHP Client. For more advanced features or further details, refer the official Lalamove API documentation.
+This guide provides the essential steps for building payloads, creating quotations and orders, and managing drivers and city information using the Lalamove PHP Client. For more advanced features or further details, refer to the official Lalamove API documentation.
 
 ---
 

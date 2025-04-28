@@ -4,6 +4,7 @@ namespace JM\Lalamove;
 
 /**
  * Handles the creation of HMAC signatures and related headers for API requests.
+ * This optimized version includes better error handling and performance improvements.
  */
 class SignatureGenerator
 {
@@ -24,9 +25,18 @@ class SignatureGenerator
      *
      * @param string $secret The secret key for HMAC signature.
      * @param string $apiKey The public API key.
+     * @throws \InvalidArgumentException If the secret or API key is empty.
      */
     public function __construct(string $secret, string $apiKey)
     {
+        if (empty($secret)) {
+            throw new \InvalidArgumentException('Secret key cannot be empty');
+        }
+        
+        if (empty($apiKey)) {
+            throw new \InvalidArgumentException('API key cannot be empty');
+        }
+        
         $this->secret = $secret;
         $this->apiKey = $apiKey;
     }
@@ -42,7 +52,7 @@ class SignatureGenerator
      */
     public function generateSignature(string $method, string $path, string $body = '', ?int $time = null): array
     {
-        $time = $time ?? (time() * 1000);  // Use current time in milliseconds if not provided.
+        $time = $time ?? $this->getCurrentTimeInMilliseconds();
         $rawSignature = $this->createRawSignature($time, $method, $path, $body);
         $signature = $this->hmacSha256($rawSignature, $this->secret);
         return [$signature, $time];
@@ -81,11 +91,21 @@ class SignatureGenerator
             "Content-Type: application/json"
         ];
 
-        if ($requestId !== null) {
+        if ($requestId !== null && trim($requestId) !== '') {
             $headers[] = "Request-ID: {$requestId}";
         }
 
         return $headers;
+    }
+
+    /**
+     * Get current time in milliseconds.
+     *
+     * @return int Current time in milliseconds
+     */
+    private function getCurrentTimeInMilliseconds(): int
+    {
+        return (int) (microtime(true) * 1000);
     }
 
     /**
@@ -116,70 +136,4 @@ class SignatureGenerator
         return hash_hmac('sha256', $data, $secret);
     }
 }
-
-
-
-
-
-// namespace JMusthakeem\Lalamove;
-
-// class SignatureGenerator
-// {
-//     private $secret;
-//     private $apiKey;
-
-//     public function __construct($secret, $apiKey)
-//     {
-//         $this->secret = $secret;
-//         $this->apiKey = $apiKey;
-//     }
-
-//     public function generateSignature($method, $path, $body = '', $time = null)
-//     {
-//         if ($time === null) {
-//             $time = time() * 1000; // Default to current time if not provided
-//         }
-
-//         $rawSignature = $this->createRawSignature($time, $method, $path, $body);
-//         $signature = $this->hmacSha256($rawSignature, $this->secret);
-//         return [$signature, $time];
-//     }
-
-//     public function createToken($signature, $time)
-//     {
-//         return "{$this->apiKey}:{$time}:{$signature}";
-//     }
-
-//     public function getHeaders($method, $path, $market, $body = '', $requestId = null)
-//     {
-//         list($signature, $time) = $this->generateSignature($method, $path, $body);
-//         $token = $this->createToken($signature, $time);
-
-//         $headers = [
-//             'Authorization: hmac ' . $token,
-//             'Market: ' . $market,
-//             'Content-Type: application/json'
-//         ];
-
-//         if ($requestId !== null) {
-//             $headers[] = 'Request-ID: ' . $requestId;
-//         }
-
-//         return $headers;
-//     }
-
-//     private function createRawSignature($time, $method, $path, $body)
-//     {
-//         if (strtoupper($method) === 'GET') {
-//             return "{$time}\r\n{$method}\r\n{$path}\r\n\r\n";
-//         } else {
-//             return "{$time}\r\n{$method}\r\n{$path}\r\n\r\n{$body}";
-//         }
-//     }
-
-//     private function hmacSha256($data, $secret)
-//     {
-//         return hash_hmac('sha256', $data, $secret);
-//     }
-// }
 

@@ -13,36 +13,63 @@ use JM\Lalamove\Payload\Order\PatchOrderPayloadBuilder;
  */
 class LalamoveClient
 {
+    /**
+     * @var SignatureGenerator For generating signatures for API requests
+     */
     private $signatureGenerator;
-    private $market;
-    private $requestId;
-    private $baseUrl;
+    
+    /**
+     * @var HttpClient For making HTTP requests to the API
+     */
     private $httpClient;
-    private $isJSON;
+    
+    /**
+     * @var Config Configuration object containing all settings
+     */
+    private $config;
+    
+    /**
+     * @var Quotation Service for quotation-related operations
+     */
     private $quotation;
+    
+    /**
+     * @var Order Service for order-related operations
+     */
     private $order;
+    
+    /**
+     * @var Driver Service for driver-related operations
+     */
     private $driver;
+    
+    /**
+     * @var Market Service for market-related operations
+     */
     private $markets;
+    
+    /**
+     * @var City Service for city-related operations
+     */
     private $city;
+    
+    /**
+     * @var Webhook Service for webhook-related operations
+     */
     private $webhook;
 
     /**
-     * Constructor for the LalamoveClient.
+     * Constructor for the LalamoveClient that accepts a Config object.
      *
-     * @param string $apiKey API key for authentication.
-     * @param string $apiSecret API secret for generating signatures.
-     * @param string $market Market/country code for the API interactions.
-     * @param string $environment Specifies the environment ('production' or 'sandbox').
-     * @param bool|null $isJSON Whether the responses should be returned as arrays.
-     * @param string $requestId Optional request identifier, auto-generated if not provided.
+     * @param Config $config Configuration object with all required parameters
      */
-    public function __construct($apiKey, $apiSecret, $market, string $environment = 'sandbox', ?bool $isJSON = true, $requestId = '')
+    public function __construct(Config $config)
     {
-        $this->signatureGenerator = new SignatureGenerator($apiSecret, $apiKey);
-        $this->market = $market;
-        $this->requestId = $requestId ?: uniqid();
-        $this->isJSON = $isJSON;
-        $this->baseUrl = ($environment === 'production') ? 'https://rest.lalamove.com' : 'https://rest.sandbox.lalamove.com';
+        $this->config = $config;
+        $this->signatureGenerator = new SignatureGenerator(
+            $config->getApiSecret(),
+            $config->getApiKey()
+        );
         $this->httpClient = new HttpClient();
         
         // Initialize related service objects
@@ -54,141 +81,188 @@ class LalamoveClient
         $this->webhook = new Webhook($this);
     }
 
-    // Getter methods for internal properties
-    public function getSignatureGenerator() { return $this->signatureGenerator; }
-    public function getMarket(): string { return $this->market; }
-    public function getRequestId(): string { return $this->requestId; }
-    public function isJSONResponse(): bool { return $this->isJSON; }
-    public function quotationPayloadBuilder(): QuotationPayloadBuilder { return new QuotationPayloadBuilder(); }
-    public function orderPayloadBuilder(): OrderPayloadBuilder { return new OrderPayloadBuilder(); }
-    public function patchOrderPayloadBuilder(): PatchOrderPayloadBuilder { return new PatchOrderPayloadBuilder(); }
-    public function getQuotation() { return $this->quotation; }
-    public function getOrder() { return $this->order; }
-    public function getDriver() { return $this->driver; }
-    public function getMarkets() { return $this->markets; }
-    public function getCity() { return $this->city; }
-    public function getWebhook() { return $this->webhook; }
+    /**
+     * Alternative constructor method to create a LalamoveClient with direct parameters
+     * instead of a Config object. This maintains backward compatibility.
+     *
+     * @param string $apiKey API key for authentication
+     * @param string $apiSecret API secret for generating signatures
+     * @param string $market Market/country code for API interactions
+     * @param string $environment Environment ('production' or 'sandbox')
+     * @param bool|null $isJSON Whether responses should be returned as arrays
+     * @param string $requestId Optional request identifier
+     * @return LalamoveClient
+     */
+    public static function create(
+        $apiKey,
+        $apiSecret,
+        $market,
+        string $environment = 'sandbox',
+        ?bool $isJSON = true,
+        $requestId = ''
+    ): LalamoveClient {
+        $config = new Config($apiKey, $apiSecret, $market, $environment, $isJSON, $requestId);
+        return new self($config);
+    }
+
+    // Getter methods
+    
+    /**
+     * Get the SignatureGenerator instance
+     * @return SignatureGenerator
+     */
+    public function getSignatureGenerator(): SignatureGenerator 
+    { 
+        return $this->signatureGenerator; 
+    }
+    
+    /**
+     * Get the market code
+     * @return string
+     */
+    public function getMarket(): string 
+    { 
+        return $this->config->getMarket(); 
+    }
+    
+    /**
+     * Get the request ID
+     * @return string
+     */
+    public function getRequestId(): string 
+    { 
+        return $this->config->getRequestId(); 
+    }
+    
+    /**
+     * Check if responses should be JSON
+     * @return bool
+     */
+    public function isJSONResponse(): bool 
+    { 
+        return $this->config->isJSON(); 
+    }
+    
+    /**
+     * Get the base URL for API requests
+     * @return string
+     */
+    public function getBaseUrl(): string
+    {
+        return $this->config->getBaseUrl();
+    }
+    
+    /**
+     * Get the Config instance
+     * @return Config
+     */
+    public function getConfig(): Config
+    {
+        return $this->config;
+    }
+
+    /**
+     * Create a new QuotationPayloadBuilder instance
+     * @return QuotationPayloadBuilder
+     */
+    public function quotationPayloadBuilder(): QuotationPayloadBuilder 
+    { 
+        return new QuotationPayloadBuilder(); 
+    }
+    
+    /**
+     * Create a new OrderPayloadBuilder instance
+     * @return OrderPayloadBuilder
+     */
+    public function orderPayloadBuilder(): OrderPayloadBuilder 
+    { 
+        return new OrderPayloadBuilder(); 
+    }
+    
+    /**
+     * Create a new PatchOrderPayloadBuilder instance
+     * @return PatchOrderPayloadBuilder
+     */
+    public function patchOrderPayloadBuilder(): PatchOrderPayloadBuilder 
+    { 
+        return new PatchOrderPayloadBuilder(); 
+    }
+    
+    /**
+     * Get the Quotation service instance
+     * @return Quotation
+     */
+    public function getQuotation() 
+    { 
+        return $this->quotation; 
+    }
+    
+    /**
+     * Get the Order service instance
+     * @return Order
+     */
+    public function getOrder() 
+    { 
+        return $this->order; 
+    }
+    
+    /**
+     * Get the Driver service instance
+     * @return Driver
+     */
+    public function getDriver() 
+    { 
+        return $this->driver; 
+    }
+    
+    /**
+     * Get the Market service instance
+     * @return Market
+     */
+    public function getMarkets() 
+    { 
+        return $this->markets; 
+    }
+    
+    /**
+     * Get the City service instance
+     * @return City
+     */
+    public function getCity() 
+    { 
+        return $this->city; 
+    }
+    
+    /**
+     * Get the Webhook service instance
+     * @return Webhook
+     */
+    public function getWebhook() 
+    { 
+        return $this->webhook; 
+    }
+
+    /**
+     * Generate a new request ID
+     * @return string The new request ID
+     */
+    public function generateNewRequestId(): string
+    {
+        return $this->config->generateNewRequestId();
+    }
 
     /**
      * Delegates API request handling to the internal HttpClient.
      *
-     * @param string $method HTTP method ('GET', 'POST', 'PATCH', 'DELETE', etc.).
-     * @param string $path API endpoint path.
-     * @param array $headers HTTP headers for the request.
-     * @param string $body Request body for methods that require it.
-     * @return mixed API response, decoded from JSON if isJSON is true.
+     * @param string $method HTTP method ('GET', 'POST', 'PATCH', 'DELETE', etc.)
+     * @param string $path API endpoint path
+     * @param array $headers HTTP headers for the request
+     * @param string $body Request body for methods that require it
+     * @return mixed API response, decoded from JSON if isJSON is true
      */
     public function makeRequest($method, $path, $headers = [], $body = '')
     {
-        $url = $this->baseUrl . $path;
-        return $this->httpClient->makeRequest($method, $url, $headers, $body, $this->isJSON);
+        $url = $this->config->getBaseUrl() . $path;
+        return $this->httpClient->makeRequest($method, $url, $headers, $body, $this->config->isJSON());
     }
 }
-
-
-// namespace JMusthakeem\Lalamove;
-
-// use JMusthakeem\Lalamove\Http\HttpClient;
-// use JMusthakeem\Lalamove\Payload\Quotation\QuotationPayloadBuilder;
-// use JMusthakeem\Lalamove\Payload\Order\OrderPayloadBuilder;
-// use JMusthakeem\Lalamove\Payload\Order\PatchOrderPayloadBuilder;
-
-// class LalamoveClient
-// {
-//     private $signatureGenerator;
-//     private $market;
-//     private $requestId;
-//     private $baseUrl;
-//     private $httpClient;
-//     private $isJSON;
-//     private $quotation;
-//     private $order;
-//     private $driver;
-//     private $markets;
-//     private $city;
-//     private $webhook;
-
-//     public function __construct($apiKey, $apiSecret, $market, string $environment = 'sandbox', ?bool $isJSON = true, $requestId = '' )
-//     {
-//         $this->signatureGenerator = new SignatureGenerator($apiSecret, $apiKey);
-//         $this->market = $market;
-//         $this->requestId = $requestId ?: uniqid();
-//         $this->isJSON = $isJSON;
-//         $this->baseUrl = ($environment === 'production')
-//             ? 'https://rest.lalamove.com'
-//             : 'https://rest.sandbox.lalamove.com';
-            
-//         $this->httpClient   = new HttpClient(); // Instantiate HttpClient
-//         $this->quotation    = new Quotation($this);
-//         $this->order        = new Order($this);
-//         $this->driver       = new Driver($this);
-//         $this->markets      = new Market($this);
-//         $this->city         = new City($this);
-//         $this->webhook      = new Webhook($this);
-//     }
-
-//     public function getSignatureGenerator()
-//     {
-//         return $this->signatureGenerator;
-//     }
-
-//     public function getMarket(): string
-//     {
-//         return $this->market;
-//     }
-
-//     public function getRequestId(): string
-//     {
-//         return $this->requestId;
-//     }
-
-//     public function isJSONResponse(): bool
-//     {
-//         return $this->isJSON;
-//     }
-
-//     public function quotationPayloadBuilder(): QuotationPayloadBuilder
-//     {
-//         return new QuotationPayloadBuilder();
-//     }
-
-//     public function orderPayloadBuilder(): OrderPayloadBuilder
-//     {
-//         return new OrderPayloadBuilder();
-//     }
-
-//     public function patchOrderPayloadBuilder(): PatchOrderPayloadBuilder
-//     {
-//         return new PatchOrderPayloadBuilder();
-//     }
-
-//     public function getQuotation(){
-//         return $this->quotation;
-//     }
-
-//     public function getOrder(){
-//         return $this->order;
-//     }
-
-//     public function getDriver(){
-//         return $this->driver;
-//     }
-
-//     public function getMarkets(){
-//         return $this->markets;
-//     }
-
-//     public function getCity(){
-//         return $this->city;
-//     }
-
-//     public function getWebhook(){
-//         return $this->webhook;
-//     }
-
-//     public function makeRequest($method, $path, $headers = [], $body = '')
-//     {
-//         $url = $this->baseUrl . $path;
-//         return $this->httpClient->makeRequest($method, $url, $headers, $body, $this->isJSON); // Delegate to HttpClient
-//     }
-// }
