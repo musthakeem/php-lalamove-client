@@ -201,5 +201,3 @@ class HttpClient
         }
     }
 }
-  git config --global user.email "jmusthak.devlp@gmail.com"
-  git config --global user.name "Jithu Musthakeem"
